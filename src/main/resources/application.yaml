@@ -1,3 +1,31 @@
 spring:
   application:
     name: activity-booking-system
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/activity_booking_system
+    username: root
+    password: 1234
+  data:
+    redis:
+      host: localhost
+      port: 8989
+      database: 0
+  Jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+server:
+  address: 127.0.0.1
+  port: 8080
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.example.activitybookingsystem.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    com.example.activitybookingsystem.mapper: debug
