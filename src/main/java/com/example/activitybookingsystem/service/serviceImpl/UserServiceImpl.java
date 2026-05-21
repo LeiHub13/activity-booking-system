@@ -66,13 +66,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BusinessException("用户或密码错误"); //用户名错误
         }
-        if (!user.getPassword().equals(loginDTO.getPassword())) {
+        if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
             throw new BusinessException("用户名或密码错误"); //密码错误
         }
         if (user.getStatus() != 1) {
             throw new BusinessException("账号已被禁用");
         }
+        System.out.println("校验成功，用户登录");
+        /**
+         *生成token
+         */
         String token = JwtUtil.generateToken(user.getId(), user.getUsername());
+
         //把token存入redis，过期时间24小时
         stringRedisTemplate.opsForValue().set("login:token:" + token, user.getId().toString(), 24, TimeUnit.MINUTES);
         return new LoginVO(token);
