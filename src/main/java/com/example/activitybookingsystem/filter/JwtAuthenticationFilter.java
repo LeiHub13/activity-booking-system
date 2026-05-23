@@ -6,58 +6,68 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 
-
-@Component  //JWT过滤器，对前端请求带着的token进行校验
+@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtUtil jwtUtil;
+    private final StringRedisTemplate stringRedisTemplate;
 
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
+    public JwtAuthenticationFilter(StringRedisTemplate stringRedisTemplate) {
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
-    @Override //过滤
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain)
-                throws ServletException, IOException {
+            throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        if (header == null || header.startsWith("Bearer ")) {
+        if (header == null || !header.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
-        String token = header.substring(7); //  去掉"Bearer "这7个字符
 
-        try{
-            Claims claim = jwtUtil.parseToken(token);
-            String username = claim.get("username", String.class);
+        String token = header.substring(7);
+        if (token.isBlank()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-            if (username != null) {
+        try {
+            Claims claims = JwtUtil.parseToken(token);
+            String username = claims.get("username", String.class);
+            String role = claims.get("role", String.class);
+            // Redis 里存在这条 token 记录，才认为当前登录态仍然有效。
+            String redisValue = stringRedisTemplate.opsForValue().get("login:token:" + token);
+
+            if (username != null && role != null && redisValue != null) {
+                // 把 JWT 里的角色装进 Spring Security，上层接口才能走 hasRole 规则。
                 UsernamePasswordAuthenticationToken authenticationToken =
                         new UsernamePasswordAuthenticationToken(
                                 username,
                                 null,
-                                Collections.emptyList()
+                                List.of(new SimpleGrantedAuthority(role))
                         );
-
                 authenticationToken.setDetails(
                         new WebAuthenticationDetailsSource().buildDetails(request)
                 );
-
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
             }
-        } catch (Exception e){
+        } catch (Exception ex) {
+            // token 解析失败或已失效时，清空上下文，后续请求会按未登录处理。
             SecurityContextHolder.clearContext();
         }
+
         filterChain.doFilter(request, response);
     }
 }

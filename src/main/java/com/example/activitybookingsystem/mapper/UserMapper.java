@@ -7,5 +7,6 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
+    //根据userId查roleId
 
 }
