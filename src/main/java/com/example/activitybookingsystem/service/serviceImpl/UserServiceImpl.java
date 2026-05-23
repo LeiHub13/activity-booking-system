@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.activitybookingsystem.common.exception.BusinessException;
 import com.example.activitybookingsystem.dto.LoginDTO;
 import com.example.activitybookingsystem.dto.RegisterDTO;
+import com.example.activitybookingsystem.dto.UpdateUserInfoDTO;
 import com.example.activitybookingsystem.entity.Role;
 import com.example.activitybookingsystem.entity.User;
 import com.example.activitybookingsystem.entity.UserRole;
@@ -22,6 +23,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -66,7 +68,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setUpdateTime(LocalDateTime.now());
         userMapper.insert(user);
 
-        // 新注册用户默认绑定普通用户角色，后续登录才能带出权限信息。
+        // New users are bound to the USER role by default.
         Role role = roleMapper.selectByRoleCode("USER");
         if (role == null) {
             throw new BusinessException("Default role USER not found");
@@ -99,10 +101,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException("Current user has no role assigned");
         }
 
-        // 角色写进 JWT，过滤器会据此还原成 Spring Security 权限。
+        // Put role into JWT so the filter can rebuild Spring Security authorities.
         String role = roleCodes.contains("ADMIN") ? "ROLE_ADMIN" : "ROLE_" + roleCodes.get(0);
         String token = JwtUtil.generateToken(user.getId(), user.getUsername(), role);
-        // 服务端把 token 再记一份到 Redis，便于后续做退出登录和强制失效。
+        // Keep a server-side token record to support logout and forced invalidation later.
         stringRedisTemplate.opsForValue().set(
                 "login:token:" + token,
                 user.getId().toString(),
@@ -115,6 +117,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public UserInfoVO getCurrentUserInfo() {
+        User user = getCurrentUserEntity();
+        return toUserInfoVO(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public UserInfoVO updateCurrentUserInfo(UpdateUserInfoDTO updateUserInfoDTO) {
+        User user = getCurrentUserEntity();
+
+        user.setRealName(trimToNull(updateUserInfoDTO.getRealName()));
+        user.setEmail(trimToNull(updateUserInfoDTO.getEmail()));
+        user.setPhone(trimToNull(updateUserInfoDTO.getPhone()));
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.updateById(user);
+
+        return toUserInfoVO(user);
+    }
+
+    private User getCurrentUserEntity() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null) {
             throw new BusinessException("Current user not found");
@@ -126,9 +147,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BusinessException("Current user does not exist");
         }
+        return user;
+    }
 
+    private UserInfoVO toUserInfoVO(User user) {
         UserInfoVO userInfoVO = new UserInfoVO();
         BeanUtils.copyProperties(user, userInfoVO);
         return userInfoVO;
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 }
