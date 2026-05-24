@@ -5,6 +5,7 @@ import com.example.activitybookingsystem.dto.LoginDTO;
 import com.example.activitybookingsystem.dto.RegisterDTO;
 import com.example.activitybookingsystem.service.UserService;
 import com.example.activitybookingsystem.vo.LoginVO;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,5 +37,16 @@ public class AuthController {
     public Result<LoginVO> login(@RequestBody @Valid LoginDTO loginDTO) {
         LoginVO token = userService.login(loginDTO);
         return Result.success(token);
+    }
+
+    @PostMapping("/logout")
+    public Result<Void> logout(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        String token = null;
+        if (header != null && header.startsWith("Bearer ")) {
+            token = header.substring(7);
+        }
+        userService.logout(token);
+        return Result.success();
     }
 }
