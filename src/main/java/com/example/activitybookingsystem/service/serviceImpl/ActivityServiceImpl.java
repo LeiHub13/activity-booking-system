@@ -1,6 +1,7 @@
 package com.example.activitybookingsystem.service.serviceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.activitybookingsystem.common.exception.BusinessException;
 import com.example.activitybookingsystem.dto.CreateActivityDTO;
@@ -11,6 +12,7 @@ import com.example.activitybookingsystem.mapper.ActivityMapper;
 import com.example.activitybookingsystem.mapper.UserMapper;
 import com.example.activitybookingsystem.service.ActivityService;
 import com.example.activitybookingsystem.vo.ActivityVO;
+import com.example.activitybookingsystem.vo.PageVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -104,15 +106,19 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
     }
 
     @Override
-    public List<ActivityVO> listPublishedActivities() {
+    public PageVO<ActivityVO> listPublishedActivities(Long pageNum, Long pageSize) {
         LambdaQueryWrapper<Activity> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Activity::getStatus, STATUS_PUBLISHED)
                 .orderByDesc(Activity::getCreateTime);
 
-        return activityMapper.selectList(queryWrapper)
-                .stream()
-                .map(this::toActivityVO)
-                .toList();
+        Page<Activity> result = activityMapper.selectPage(new Page<>(pageNum, pageSize), queryWrapper);
+        List<ActivityVO> records = result.getRecords().stream().map(this::toActivityVO).toList();
+        PageVO<ActivityVO> pageVO = new PageVO<>();
+        pageVO.setTotal(result.getTotal());
+        pageVO.setPageNum(result.getCurrent());
+        pageVO.setPageSize(result.getSize());
+        pageVO.setRecords(records);
+        return pageVO;
     }
 
     @Override
