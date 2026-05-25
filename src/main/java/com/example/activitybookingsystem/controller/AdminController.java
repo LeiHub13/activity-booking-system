@@ -6,6 +6,7 @@ import com.example.activitybookingsystem.dto.UpdateActivityDTO;
 import com.example.activitybookingsystem.service.ActivityService;
 import com.example.activitybookingsystem.service.RegistrationService;
 import com.example.activitybookingsystem.vo.AdminRegistrationVO;
+import com.example.activitybookingsystem.vo.ActivityRegistrationStatsVO;
 import com.example.activitybookingsystem.vo.ActivityVO;
 import com.example.activitybookingsystem.vo.PageVO;
 import com.example.activitybookingsystem.vo.RegistrationVO;
@@ -18,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -50,6 +53,20 @@ public class AdminController {
     @PutMapping("/activity/{activityId}/offline")
     public Result<ActivityVO> offlineActivity(@PathVariable Long activityId) {
         return Result.success(activityService.offlineActivity(activityId));
+    }
+
+    @GetMapping("/activity/registration-stats")
+    public Result<PageVO<ActivityRegistrationStatsVO>> listActivityRegistrationStats(
+            @RequestParam(defaultValue = "1") Long pageNum,
+            @RequestParam(defaultValue = "10") Long pageSize,
+            @RequestParam(required = false) String keyword) {
+        return Result.success(activityService.listActivityRegistrationStats(pageNum, pageSize, keyword));
+    }
+
+    @GetMapping("/activity/popular-ranking")
+    public Result<List<ActivityRegistrationStatsVO>> listPopularActivityRanking(
+            @RequestParam(required = false) Integer limit) {
+        return Result.success(activityService.listPopularActivityRanking(limit));
     }
 
     @GetMapping("/registration/list")

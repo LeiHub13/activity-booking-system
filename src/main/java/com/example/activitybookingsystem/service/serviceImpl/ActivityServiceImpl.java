@@ -1,6 +1,7 @@
 package com.example.activitybookingsystem.service.serviceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.activitybookingsystem.common.exception.BusinessException;
@@ -11,6 +12,7 @@ import com.example.activitybookingsystem.entity.User;
 import com.example.activitybookingsystem.mapper.ActivityMapper;
 import com.example.activitybookingsystem.mapper.UserMapper;
 import com.example.activitybookingsystem.service.ActivityService;
+import com.example.activitybookingsystem.vo.ActivityRegistrationStatsVO;
 import com.example.activitybookingsystem.vo.ActivityVO;
 import com.example.activitybookingsystem.vo.PageVO;
 import org.springframework.beans.BeanUtils;
@@ -27,6 +29,8 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
 
     private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String STATUS_CLOSED = "CLOSED";
+    private static final int DEFAULT_RANKING_LIMIT = 10;
+    private static final int MAX_RANKING_LIMIT = 50;
 
     private final ActivityMapper activityMapper;
     private final UserMapper userMapper;
@@ -122,6 +126,26 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
     }
 
     @Override
+    public PageVO<ActivityRegistrationStatsVO> listActivityRegistrationStats(Long pageNum, Long pageSize, String keyword) {
+        IPage<ActivityRegistrationStatsVO> result = activityMapper.selectActivityRegistrationStatsPage(
+                new Page<>(pageNum, pageSize),
+                trimToNull(keyword)
+        );
+
+        PageVO<ActivityRegistrationStatsVO> pageVO = new PageVO<>();
+        pageVO.setTotal(result.getTotal());
+        pageVO.setPageNum(result.getCurrent());
+        pageVO.setPageSize(result.getSize());
+        pageVO.setRecords(result.getRecords());
+        return pageVO;
+    }
+
+    @Override
+    public List<ActivityRegistrationStatsVO> listPopularActivityRanking(Integer limit) {
+        return activityMapper.selectPopularActivityRanking(normalizeRankingLimit(limit));
+    }
+
+    @Override
     public ActivityVO getActivityDetail(Long activityId) {
         return toActivityVO(getActivityById(activityId));
     }
@@ -172,5 +196,19 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
         ActivityVO activityVO = new ActivityVO();
         BeanUtils.copyProperties(activity, activityVO);
         return activityVO;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private int normalizeRankingLimit(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return DEFAULT_RANKING_LIMIT;
+        }
+        return Math.min(limit, MAX_RANKING_LIMIT);
     }
 }
