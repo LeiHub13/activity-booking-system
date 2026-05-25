@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.activitybookingsystem.mapper.RegistrationMapper">
+    <select id="selectAdminRegistrationPage"
+            resultType="com.example.activitybookingsystem.vo.AdminRegistrationVO">
+        select
+            r.id as registrationId,
+            u.id as userId,
+            u.username as username,
+            u.real_name as realName,
+            u.phone as phone,
+            u.email as email,
+            a.id as activityId,
+            a.title as activityTitle,
+            a.status as activityStatus,
+            r.status as registrationStatus,
+            r.remark as remark,
+            r.audit_user_id as auditUserId,
+            au.username as auditUsername,
+            r.audit_time as auditTime,
+            r.create_time as registrationTime,
+            r.update_time as updateTime
+        from registration r
+        left join `user` u on r.user_id = u.id
+        left join activity a on r.activity_id = a.id
+        left join `user` au on r.audit_user_id = au.id
+        <where>
+            <if test="status != null and status != ''">
+                and r.status = #{status}
+            </if>
+            <if test="activityId != null">
+                and r.activity_id = #{activityId}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    u.username like concat('%', #{keyword}, '%')
+                    or u.real_name like concat('%', #{keyword}, '%')
+                    or u.phone like concat('%', #{keyword}, '%')
+                    or a.title like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        order by r.create_time desc
+    </select>
+</mapper>
