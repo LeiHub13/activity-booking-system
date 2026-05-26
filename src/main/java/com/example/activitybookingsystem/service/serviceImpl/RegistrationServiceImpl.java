@@ -103,19 +103,18 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
         Registration registration = registrationMapper.selectById(registrationId);
         validateRegistrationCanCancel(registration, currentUser.getId());
 
+        // 先用条件更新锁住状态变更，只有真正取消成功才允许扣减活动人数。
+        int updatedRegistration = registrationMapper.cancelRegistrationIfAllowed(registrationId, currentUser.getId());
+        if (updatedRegistration != 1) {
+            throw new BusinessException("报名状态已变化，不能重复取消");
+        }
+
         int updatedCount = activityMapper.decreaseCurrentCount(registration.getActivityId());
         if (updatedCount != 1) {
             throw new BusinessException("活动报名人数更新失败");
         }
 
-        registration.setStatus(REGISTRATION_STATUS_CANCELED);
-        registration.setUpdateTime(LocalDateTime.now());
-        int updatedRegistration = registrationMapper.updateById(registration);
-        if (updatedRegistration != 1) {
-            throw new BusinessException("取消报名失败");
-        }
-
-        return toRegistrationVO(registration);
+        return toRegistrationVO(registrationMapper.selectById(registrationId));
     }
 
     @Override
@@ -125,20 +124,15 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
         Registration registration = registrationMapper.selectById(registrationId);
         validateRegistrationCanApprove(registration);
 
-        LocalDateTime now = LocalDateTime.now();
-        registration.setStatus(REGISTRATION_STATUS_APPROVED);
-        registration.setAuditUserId(auditor.getId());
-        registration.setAuditTime(now);
-        registration.setUpdateTime(now);
-
-        int updated = registrationMapper.updateById(registration);
+        int updated = registrationMapper.approveRegistrationIfPending(registrationId, auditor.getId());
         if (updated != 1) {
-            throw new BusinessException("审核通过失败");
+            throw new BusinessException("报名状态已变化，不能重复审核通过");
         }
 
-        Activity activity = activityMapper.selectById(registration.getActivityId());
-        noticeService.createRegistrationAuditNotice(registration, activity, true);
-        return toRegistrationVO(registration);
+        Registration updatedRegistration = registrationMapper.selectById(registrationId);
+        Activity activity = activityMapper.selectById(updatedRegistration.getActivityId());
+        noticeService.createRegistrationAuditNotice(updatedRegistration, activity, true);
+        return toRegistrationVO(updatedRegistration);
     }
 
     @Override
@@ -148,25 +142,21 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
         Registration registration = registrationMapper.selectById(registrationId);
         validateRegistrationCanReject(registration);
 
+        // 拒绝也先抢状态变更，避免管理员重复点击导致活动人数重复扣减。
+        int updated = registrationMapper.rejectRegistrationIfPending(registrationId, auditor.getId());
+        if (updated != 1) {
+            throw new BusinessException("报名状态已变化，不能重复审核拒绝");
+        }
+
         int updatedCount = activityMapper.decreaseCurrentCount(registration.getActivityId());
         if (updatedCount != 1) {
             throw new BusinessException("活动报名人数更新失败");
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        registration.setStatus(REGISTRATION_STATUS_REJECTED);
-        registration.setAuditUserId(auditor.getId());
-        registration.setAuditTime(now);
-        registration.setUpdateTime(now);
-
-        int updated = registrationMapper.updateById(registration);
-        if (updated != 1) {
-            throw new BusinessException("审核拒绝失败");
-        }
-
-        Activity activity = activityMapper.selectById(registration.getActivityId());
-        noticeService.createRegistrationAuditNotice(registration, activity, false);
-        return toRegistrationVO(registration);
+        Registration updatedRegistration = registrationMapper.selectById(registrationId);
+        Activity activity = activityMapper.selectById(updatedRegistration.getActivityId());
+        noticeService.createRegistrationAuditNotice(updatedRegistration, activity, false);
+        return toRegistrationVO(updatedRegistration);
     }
 
     @Override
@@ -270,18 +260,15 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
             throw new BusinessException("活动人数已满或活动不可报名");
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        registration.setStatus(REGISTRATION_STATUS_PENDING);
-        registration.setRemark(trimToNull(createRegistrationDTO.getRemark()));
-        registration.setAuditUserId(null);
-        registration.setAuditTime(null);
-        registration.setUpdateTime(now);
-        int updatedRegistration = registrationMapper.updateById(registration);
+        int updatedRegistration = registrationMapper.reactivateCanceledRegistration(
+                registration.getId(),
+                trimToNull(createRegistrationDTO.getRemark())
+        );
         if (updatedRegistration != 1) {
-            throw new BusinessException("报名失败");
+            throw new BusinessException("报名状态已变化，请刷新后重试");
         }
 
-        return toRegistrationVO(registration);
+        return toRegistrationVO(registrationMapper.selectById(registration.getId()));
     }
 
     private void validateRegistrationCanCancel(Registration registration, Long currentUserId) {

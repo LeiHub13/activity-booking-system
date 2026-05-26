@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.activitybookingsystem.mapper.ActivityMapper">
+    <select id="selectActivityRegistrationStatsPage"
+            resultType="com.example.activitybookingsystem.vo.ActivityRegistrationStatsVO">
+        select
+            a.id as activityId,
+            a.title as activityTitle,
+            a.status as activityStatus,
+            a.max_count as maxCount,
+            a.current_count as currentCount,
+            count(r.id) as totalCount,
+            coalesce(sum(case when r.status = 'PENDING' then 1 else 0 end), 0) as pendingCount,
+            coalesce(sum(case when r.status = 'APPROVED' then 1 else 0 end), 0) as approvedCount,
+            coalesce(sum(case when r.status = 'REJECTED' then 1 else 0 end), 0) as rejectedCount,
+            coalesce(sum(case when r.status = 'CANCELED' then 1 else 0 end), 0) as canceledCount
+        from activity a
+        left join registration r on r.activity_id = a.id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and a.title like concat('%', #{keyword}, '%')
+            </if>
+        </where>
+        group by
+            a.id,
+            a.title,
+            a.status,
+            a.max_count,
+            a.current_count,
+            a.create_time
+        order by a.create_time desc
+    </select>
+
+    <select id="selectPopularActivityRanking"
+            resultType="com.example.activitybookingsystem.vo.ActivityRegistrationStatsVO">
+        select
+            a.id as activityId,
+            a.title as activityTitle,
+            a.status as activityStatus,
+            a.max_count as maxCount,
+            a.current_count as currentCount,
+            count(r.id) as totalCount,
+            coalesce(sum(case when r.status = 'PENDING' then 1 else 0 end), 0) as pendingCount,
+            coalesce(sum(case when r.status = 'APPROVED' then 1 else 0 end), 0) as approvedCount,
+            coalesce(sum(case when r.status = 'REJECTED' then 1 else 0 end), 0) as rejectedCount,
+            coalesce(sum(case when r.status = 'CANCELED' then 1 else 0 end), 0) as canceledCount
+        from activity a
+        left join registration r on r.activity_id = a.id
+        group by
+            a.id,
+            a.title,
+            a.status,
+            a.max_count,
+            a.current_count,
+            a.create_time
+        order by
+            a.current_count desc,
+            coalesce(sum(case when r.status = 'APPROVED' then 1 else 0 end), 0) desc,
+            count(r.id) desc,
+            a.create_time desc
+        limit #{limit}
+    </select>
+</mapper>
