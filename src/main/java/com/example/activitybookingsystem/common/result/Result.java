@@ -14,7 +14,7 @@ public class Result<T> {
         this.code = code;
         this.message = message;
         this.data = data;
-    } //有餐构造方法
+    } //有参构造方法
 
     public static <T> Result<T> success() {
         return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMessage(), null);

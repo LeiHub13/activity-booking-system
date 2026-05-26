@@ -1,1 +1,798 @@
-预约报名管理系统
+# 预约报名管理系统接口文档
+
+## 1. 基本说明
+
+### 1.1 基础地址
+
+本地开发环境：
+
+```text
+http://localhost:8080
+```
+
+前端开发环境：
+
+```text
+http://localhost:5173
+```
+
+### 1.2 统一返回格式
+
+所有接口统一返回 `Result<T>`：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {}
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| code | number | 业务状态码，200 表示成功 |
+| message | string | 返回信息 |
+| data | any | 返回数据，可能为对象、数组、分页对象或 null |
+
+常见业务状态码：
+
+| code | 说明 |
+| --- | --- |
+| 200 | 操作成功 |
+| 400 | 参数错误 |
+| 401 | 未登录或 token 已失效 |
+| 403 | 无权限访问 |
+| 404 | 资源不存在 |
+| 500 | 操作失败 |
+
+### 1.3 认证方式
+
+登录成功后，后端返回 JWT token。除注册、登录接口外，其余接口请求头需要携带：
+
+```http
+Authorization: Bearer <token>
+```
+
+权限规则：
+
+| 接口前缀 | 访问角色 |
+| --- | --- |
+| `/api/auth/**` | 不需要登录 |
+| `/api/user/**` | 普通用户、管理员 |
+| `/api/activity/**` | 普通用户、管理员 |
+| `/api/registration/**` | 普通用户、管理员 |
+| `/api/notice/**` | 普通用户、管理员 |
+| `/api/admin/**` | 管理员 |
+
+### 1.4 时间格式
+
+请求和响应中的时间字段使用 `LocalDateTime`，推荐格式：
+
+```text
+yyyy-MM-ddTHH:mm:ss
+```
+
+示例：
+
+```text
+2026-05-26T14:30:00
+```
+
+### 1.5 状态枚举
+
+活动状态：
+
+| 值 | 说明 |
+| --- | --- |
+| DRAFT | 草稿 |
+| PUBLISHED | 已发布 |
+| CLOSED | 已关闭 / 已下线 |
+| FINISHED | 已结束 |
+
+报名状态：
+
+| 值 | 说明 |
+| --- | --- |
+| PENDING | 待审核 |
+| APPROVED | 已通过 |
+| REJECTED | 已拒绝 |
+| CANCELED | 已取消 |
+
+我的报名分类：
+
+| 值 | 说明 |
+| --- | --- |
+| ALL | 全部 |
+| ACTIVE | 未取消的报名 |
+| APPROVED | 已通过 |
+| CANCELED | 已取消 |
+| REJECTED | 已拒绝 |
+
+通知类型：
+
+| 值 | 说明 |
+| --- | --- |
+| REGISTRATION_APPROVED | 报名审核通过通知 |
+| REGISTRATION_REJECTED | 报名审核拒绝通知 |
+
+通知已读状态：
+
+| 值 | 说明 |
+| --- | --- |
+| 0 | 未读 |
+| 1 | 已读 |
+
+## 2. 认证接口
+
+### 2.1 用户注册
+
+```http
+POST /api/auth/register
+```
+
+权限：无需登录。
+
+请求体：
+
+```json
+{
+  "username": "zhangsan",
+  "password": "123456",
+  "realName": "张三",
+  "email": "zhangsan@example.com",
+  "phone": "13800138000"
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| username | string | 是 | 用户名 |
+| password | string | 是 | 密码 |
+| realName | string | 否 | 真实姓名 |
+| email | string | 否 | 邮箱 |
+| phone | string | 否 | 手机号 |
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": null
+}
+```
+
+### 2.2 用户登录
+
+```http
+POST /api/auth/login
+```
+
+权限：无需登录。
+
+请求体：
+
+```json
+{
+  "username": "zhangsan",
+  "password": "123456"
+}
+```
+
+响应数据：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| token | string | JWT 登录凭证 |
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiJ9..."
+  }
+}
+```
+
+### 2.3 退出登录
+
+```http
+POST /api/auth/logout
+```
+
+权限：携带 token 后调用。
+
+请求头：
+
+```http
+Authorization: Bearer <token>
+```
+
+说明：后端会删除 Redis 中当前 token，使登录状态失效。
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": null
+}
+```
+
+## 3. 用户接口
+
+### 3.1 用户接口测试
+
+```http
+GET /api/user/test
+```
+
+权限：普通用户、管理员。
+
+响应数据：字符串。
+
+### 3.2 获取当前用户信息
+
+```http
+GET /api/user/me
+```
+
+权限：普通用户、管理员。
+
+响应数据 `UserInfoVO`：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | number | 用户 ID |
+| username | string | 用户名 |
+| realName | string | 真实姓名 |
+| phone | string | 手机号 |
+| email | string | 邮箱 |
+| status | number | 用户状态，1 正常，0 禁用 |
+| createTime | string | 创建时间 |
+| updateTime | string | 更新时间 |
+
+### 3.3 修改当前用户资料
+
+```http
+PUT /api/user/me
+```
+
+权限：普通用户、管理员。
+
+请求体：
+
+```json
+{
+  "realName": "张三",
+  "email": "zhangsan@example.com",
+  "phone": "13800138000"
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| realName | string | 否 | 真实姓名 |
+| email | string | 否 | 邮箱，需符合邮箱格式 |
+| phone | string | 否 | 手机号，需符合 11 位手机号格式 |
+
+响应数据：`UserInfoVO`。
+
+## 4. 活动接口
+
+### 4.1 分页查询已发布活动
+
+```http
+GET /api/activity/lists
+```
+
+权限：普通用户、管理员。
+
+Query 参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| pageNum | number | 否 | 1 | 当前页 |
+| pageSize | number | 否 | 10 | 每页数量 |
+
+响应数据：`PageVO<ActivityVO>`。
+
+分页对象字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| total | number | 总记录数 |
+| pageNum | number | 当前页 |
+| pageSize | number | 每页数量 |
+| records | array | 当前页数据 |
+
+`ActivityVO` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | number | 活动 ID |
+| title | string | 活动标题 |
+| content | string | 活动内容 |
+| location | string | 活动地点 |
+| startTime | string | 活动开始时间 |
+| endTime | string | 活动结束时间 |
+| signupStartTime | string | 报名开始时间 |
+| signupEndTime | string | 报名结束时间 |
+| maxCount | number | 人数上限 |
+| currentCount | number | 当前占用人数 |
+| status | string | 活动状态 |
+| publisherId | number | 发布人 ID |
+| createTime | string | 创建时间 |
+| updateTime | string | 更新时间 |
+
+### 4.2 查询活动详情
+
+```http
+GET /api/activity/{activityId}
+```
+
+权限：普通用户、管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| activityId | number | 活动 ID |
+
+响应数据：`ActivityVO`。
+
+## 5. 报名接口
+
+### 5.1 活动报名
+
+```http
+POST /api/registration
+```
+
+权限：普通用户、管理员。
+
+请求体：
+
+```json
+{
+  "activityId": 1,
+  "remark": "我想参加这个活动"
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| activityId | number | 是 | 活动 ID |
+| remark | string | 否 | 备注，最长 255 字符 |
+
+业务说明：
+
+| 规则 | 说明 |
+| --- | --- |
+| 活动必须存在 | 活动不存在时返回失败 |
+| 活动必须已发布 | 只有 `PUBLISHED` 状态可以报名 |
+| 必须在报名时间内 | 当前时间需要处于报名开始和报名结束之间 |
+| 不能重复报名 | 同一用户同一活动只能有一条报名记录 |
+| 已取消可重新报名 | 已取消记录会重新变为 `PENDING` |
+| 人数并发控制 | 通过数据库条件更新控制 `current_count < max_count` |
+
+响应数据 `RegistrationVO`：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | number | 报名 ID |
+| userId | number | 用户 ID |
+| activityId | number | 活动 ID |
+| status | string | 报名状态 |
+| remark | string | 备注 |
+| auditUserId | number | 审核人 ID |
+| auditTime | string | 审核时间 |
+| createTime | string | 创建时间 |
+| updateTime | string | 更新时间 |
+
+### 5.2 取消报名
+
+```http
+PUT /api/registration/{registrationId}/cancel
+```
+
+权限：普通用户、管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| registrationId | number | 报名 ID |
+
+业务说明：只能取消自己的报名，且当前状态必须为 `PENDING` 或 `APPROVED`。
+
+响应数据：`RegistrationVO`。
+
+### 5.3 分页查询我的报名
+
+```http
+GET /api/registration/my
+```
+
+权限：普通用户、管理员。
+
+Query 参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| pageNum | number | 否 | 1 | 当前页 |
+| pageSize | number | 否 | 5 | 每页数量 |
+| category | string | 否 | ALL | 分类：ALL、ACTIVE、APPROVED、CANCELED、REJECTED |
+
+响应数据：`PageVO<MyRegistrationVO>`。
+
+`MyRegistrationVO` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| registrationId | number | 报名 ID |
+| activityId | number | 活动 ID |
+| registrationStatus | string | 报名状态 |
+| remark | string | 备注 |
+| registrationTime | string | 报名时间 |
+| activityTitle | string | 活动标题 |
+| activityContent | string | 活动内容 |
+| activityLocation | string | 活动地点 |
+| activityStartTime | string | 活动开始时间 |
+| activityEndTime | string | 活动结束时间 |
+| signupStartTime | string | 报名开始时间 |
+| signupEndTime | string | 报名结束时间 |
+| maxCount | number | 人数上限 |
+| currentCount | number | 当前占用人数 |
+| activityStatus | string | 活动状态 |
+
+## 6. 通知接口
+
+### 6.1 分页查询我的通知
+
+```http
+GET /api/notice/my
+```
+
+权限：普通用户、管理员。
+
+Query 参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| pageNum | number | 否 | 1 | 当前页 |
+| pageSize | number | 否 | 10 | 每页数量 |
+| unreadOnly | boolean | 否 | false | 是否只查询未读通知 |
+
+响应数据：`PageVO<NoticeVO>`。
+
+`NoticeVO` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | number | 通知 ID |
+| title | string | 通知标题 |
+| content | string | 通知内容 |
+| type | string | 通知类型 |
+| isRead | number | 是否已读，0 未读，1 已读 |
+| createTime | string | 创建时间 |
+
+### 6.2 查询未读通知数量
+
+```http
+GET /api/notice/unread-count
+```
+
+权限：普通用户、管理员。
+
+响应数据：未读数量。
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": 3
+}
+```
+
+### 6.3 标记单条通知为已读
+
+```http
+PUT /api/notice/{noticeId}/read
+```
+
+权限：普通用户、管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| noticeId | number | 通知 ID |
+
+业务说明：只能操作自己的通知。
+
+响应数据：`NoticeVO`。
+
+### 6.4 全部标记为已读
+
+```http
+PUT /api/notice/read-all
+```
+
+权限：普通用户、管理员。
+
+业务说明：将当前用户所有未读通知标记为已读。
+
+响应数据：`null`。
+
+## 7. 管理员接口
+
+### 7.1 管理员接口测试
+
+```http
+GET /api/admin/test
+```
+
+权限：管理员。
+
+响应数据：字符串。
+
+### 7.2 发布活动
+
+```http
+POST /api/admin/activity
+```
+
+权限：管理员。
+
+请求体：
+
+```json
+{
+  "title": "校园志愿服务活动",
+  "content": "组织学生参与校园志愿服务。",
+  "location": "教学楼 A101",
+  "startTime": "2026-06-01T09:00:00",
+  "endTime": "2026-06-01T11:00:00",
+  "signupStartTime": "2026-05-26T09:00:00",
+  "signupEndTime": "2026-05-31T18:00:00",
+  "maxCount": 50
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| title | string | 是 | 活动标题，最长 100 字符 |
+| content | string | 否 | 活动内容 |
+| location | string | 否 | 活动地点，最长 200 字符 |
+| startTime | string | 是 | 活动开始时间，必须晚于当前时间 |
+| endTime | string | 是 | 活动结束时间 |
+| signupStartTime | string | 是 | 报名开始时间 |
+| signupEndTime | string | 是 | 报名结束时间 |
+| maxCount | number | 是 | 人数上限，必须大于 0 |
+
+业务说明：
+
+| 规则 | 说明 |
+| --- | --- |
+| 活动开始时间早于活动结束时间 | `startTime < endTime` |
+| 报名开始时间早于报名结束时间 | `signupStartTime < signupEndTime` |
+| 报名结束时间不能晚于活动开始时间 | `signupEndTime <= startTime` |
+| 新活动状态 | 默认 `PUBLISHED` |
+| 当前报名人数 | 默认 `0` |
+
+响应数据：`ActivityVO`。
+
+### 7.3 编辑活动
+
+```http
+PUT /api/admin/activity/{activityId}
+```
+
+权限：管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| activityId | number | 活动 ID |
+
+请求体：同发布活动。
+
+业务说明：活动人数上限不能小于当前占用人数。
+
+响应数据：`ActivityVO`。
+
+### 7.4 下线活动
+
+```http
+PUT /api/admin/activity/{activityId}/offline
+```
+
+权限：管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| activityId | number | 活动 ID |
+
+业务说明：将活动状态改为 `CLOSED`。
+
+响应数据：`ActivityVO`。
+
+### 7.5 分页统计各活动报名人数
+
+```http
+GET /api/admin/activity/registration-stats
+```
+
+权限：管理员。
+
+Query 参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| pageNum | number | 否 | 1 | 当前页 |
+| pageSize | number | 否 | 10 | 每页数量 |
+| keyword | string | 否 | 无 | 活动标题关键字 |
+
+响应数据：`PageVO<ActivityRegistrationStatsVO>`。
+
+`ActivityRegistrationStatsVO` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| activityId | number | 活动 ID |
+| activityTitle | string | 活动标题 |
+| activityStatus | string | 活动状态 |
+| maxCount | number | 人数上限 |
+| currentCount | number | 当前占用人数 |
+| totalCount | number | 总报名记录数 |
+| pendingCount | number | 待审核数量 |
+| approvedCount | number | 已通过数量 |
+| rejectedCount | number | 已拒绝数量 |
+| canceledCount | number | 已取消数量 |
+
+### 7.6 热门活动排行
+
+```http
+GET /api/admin/activity/popular-ranking
+```
+
+权限：管理员。
+
+Query 参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| limit | number | 否 | 10 | 返回前 N 名，最大 50 |
+
+排行规则：
+
+| 优先级 | 排序字段 | 方向 |
+| --- | --- | --- |
+| 1 | currentCount | 倒序 |
+| 2 | approvedCount | 倒序 |
+| 3 | totalCount | 倒序 |
+| 4 | createTime | 倒序 |
+
+响应数据：`ActivityRegistrationStatsVO[]`。
+
+### 7.7 管理员分页查询报名列表
+
+```http
+GET /api/admin/registration/list
+```
+
+权限：管理员。
+
+Query 参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| pageNum | number | 否 | 1 | 当前页 |
+| pageSize | number | 否 | 10 | 每页数量 |
+| status | string | 否 | 无 | 报名状态 |
+| activityId | number | 否 | 无 | 活动 ID |
+| keyword | string | 否 | 无 | 用户名、姓名、手机号或活动标题关键字 |
+
+响应数据：`PageVO<AdminRegistrationVO>`。
+
+`AdminRegistrationVO` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| registrationId | number | 报名 ID |
+| userId | number | 用户 ID |
+| username | string | 用户名 |
+| realName | string | 真实姓名 |
+| phone | string | 手机号 |
+| email | string | 邮箱 |
+| activityId | number | 活动 ID |
+| activityTitle | string | 活动标题 |
+| activityStatus | string | 活动状态 |
+| registrationStatus | string | 报名状态 |
+| remark | string | 备注 |
+| auditUserId | number | 审核人 ID |
+| auditUsername | string | 审核人用户名 |
+| auditTime | string | 审核时间 |
+| registrationTime | string | 报名时间 |
+| updateTime | string | 更新时间 |
+
+### 7.8 审核通过报名
+
+```http
+PUT /api/admin/registration/{registrationId}/approve
+```
+
+权限：管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| registrationId | number | 报名 ID |
+
+业务说明：只有 `PENDING` 状态可以审核通过。审核通过后会生成站内通知。
+
+响应数据：`RegistrationVO`。
+
+### 7.9 审核拒绝报名
+
+```http
+PUT /api/admin/registration/{registrationId}/reject
+```
+
+权限：管理员。
+
+Path 参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| registrationId | number | 报名 ID |
+
+业务说明：只有 `PENDING` 状态可以审核拒绝。审核拒绝后会释放活动名额，并生成站内通知。
+
+响应数据：`RegistrationVO`。
+
+## 8. 典型调用流程
+
+### 8.1 普通用户报名流程
+
+```text
+1. POST /api/auth/register 注册账号
+2. POST /api/auth/login 登录获取 token
+3. GET /api/activity/lists 查看可报名活动
+4. POST /api/registration 提交活动报名
+5. GET /api/registration/my 查看我的报名记录
+6. GET /api/notice/my 查看审核通知
+```
+
+### 8.2 管理员审核流程
+
+```text
+1. POST /api/auth/login 管理员登录
+2. POST /api/admin/activity 发布活动
+3. GET /api/admin/registration/list 查询报名列表
+4. PUT /api/admin/registration/{registrationId}/approve 审核通过
+5. PUT /api/admin/registration/{registrationId}/reject 审核拒绝
+6. GET /api/admin/activity/registration-stats 查看报名统计
+7. GET /api/admin/activity/popular-ranking 查看热门排行
+```
