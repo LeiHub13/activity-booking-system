@@ -12,7 +12,7 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    private static final long EXPIRATION_TIME = 24 * 60 * 60 * 1000L;
+    private static final long EXPIRATION_TIME = 24 * 60 * 60 * 1000L; //1000ms 是 1s
     private static final SecretKey KEY =
             Keys.hmacShaKeyFor("activity-booking-system-secret-key-123456".getBytes());
 

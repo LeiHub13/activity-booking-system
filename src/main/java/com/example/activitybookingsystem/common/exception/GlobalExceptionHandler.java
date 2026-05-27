@@ -3,10 +3,12 @@ package com.example.activitybookingsystem.common.exception;
 import com.example.activitybookingsystem.common.result.Result;
 import com.example.activitybookingsystem.common.result.ResultCode;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -30,7 +32,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
-        e.printStackTrace();
+        log.error("发生异常", e);
         return Result.fail(ResultCode.FAIL, e.getMessage());
     }
 }

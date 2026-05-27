@@ -3,6 +3,9 @@ package com.example.activitybookingsystem.controller;
 import com.example.activitybookingsystem.common.result.Result;
 import com.example.activitybookingsystem.dto.LoginDTO;
 import com.example.activitybookingsystem.dto.RegisterDTO;
+import com.example.activitybookingsystem.dto.ResetPasswordDTO;
+import com.example.activitybookingsystem.dto.SendPasswordResetCodeDTO;
+import com.example.activitybookingsystem.service.MailService;
 import com.example.activitybookingsystem.service.UserService;
 import com.example.activitybookingsystem.vo.LoginVO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,10 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final UserService userService;
+    private final MailService mailService;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, MailService mailService) {
         this.userService = userService;
-    } //构造器注入
+        this.mailService = mailService;
+    }
 
     @PostMapping("/register")
     public Result<Void> register(@RequestBody @Valid RegisterDTO registerDTO) {
@@ -47,6 +52,18 @@ public class AuthController {
             token = header.substring(7);
         }
         userService.logout(token);
+        return Result.success();
+    }
+
+    @PostMapping("/password/reset-code")
+    public Result<Void> sendPasswordResetCode(@RequestBody @Valid SendPasswordResetCodeDTO dto) {
+        mailService.sendPasswordResetCode(dto);
+        return Result.success();
+    }
+
+    @PostMapping("/password/reset")
+    public Result<Void> resetPassword(@RequestBody @Valid ResetPasswordDTO dto) {
+        mailService.resetPassword(dto);
         return Result.success();
     }
 }

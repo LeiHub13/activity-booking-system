@@ -57,7 +57,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void  register(RegisterDTO registerDTO) {
+    public void register(RegisterDTO registerDTO) {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(User::getUsername, registerDTO.getUsername());
         User existUser = userMapper.selectOne(queryWrapper);
