@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.activitybookingsystem.cache.ActivityCacheService;
 import com.example.activitybookingsystem.common.exception.BusinessException;
 import com.example.activitybookingsystem.dto.CreateActivityDTO;
 import com.example.activitybookingsystem.dto.UpdateActivityDTO;
@@ -32,10 +33,12 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
     private static final int DEFAULT_RANKING_LIMIT = 10;
     private static final int MAX_RANKING_LIMIT = 50;
 
+    private final ActivityCacheService activityCacheService;
     private final ActivityMapper activityMapper;
     private final UserMapper userMapper;
 
-    public ActivityServiceImpl(ActivityMapper activityMapper, UserMapper userMapper) {
+    public ActivityServiceImpl(ActivityCacheService activityCacheService, ActivityMapper activityMapper, UserMapper userMapper) {
+        this.activityCacheService = activityCacheService;
         this.activityMapper = activityMapper;
         this.userMapper = userMapper;
     }
@@ -142,7 +145,12 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
 
     @Override
     public List<ActivityRegistrationStatsVO> listPopularActivityRanking(Integer limit) {
-        return activityMapper.selectPopularActivityRanking(normalizeRankingLimit(limit));
+        List<ActivityRegistrationStatsVO> list = activityCacheService.getPopularActivityRanking();
+        if (list == null) {
+            activityCacheService.setPopularRankingCache(activityMapper.selectPopularActivityRanking(normalizeRankingLimit(limit)));
+            return activityMapper.selectPopularActivityRanking(normalizeRankingLimit(limit));
+        }
+        return list;
     }
 
     @Override
