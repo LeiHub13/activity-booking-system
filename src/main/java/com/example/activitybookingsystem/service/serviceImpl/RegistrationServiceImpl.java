@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.activitybookingsystem.cache.ActivityCacheService;
 import com.example.activitybookingsystem.common.exception.BusinessException;
 import com.example.activitybookingsystem.dto.CreateRegistrationDTO;
 import com.example.activitybookingsystem.entity.Activity;
@@ -12,7 +13,8 @@ import com.example.activitybookingsystem.entity.User;
 import com.example.activitybookingsystem.mapper.ActivityMapper;
 import com.example.activitybookingsystem.mapper.RegistrationMapper;
 import com.example.activitybookingsystem.mapper.UserMapper;
-import com.example.activitybookingsystem.service.NoticeService;
+import com.example.activitybookingsystem.message.AuditNoticeMessage;
+import com.example.activitybookingsystem.mq.AuditNoticeProducer;
 import com.example.activitybookingsystem.service.RegistrationService;
 import com.example.activitybookingsystem.vo.AdminRegistrationVO;
 import com.example.activitybookingsystem.vo.MyRegistrationVO;
@@ -24,6 +26,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -46,16 +50,19 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
     private final RegistrationMapper registrationMapper;
     private final ActivityMapper activityMapper;
     private final UserMapper userMapper;
-    private final NoticeService noticeService;
+    private final ActivityCacheService activityCacheService;
+    private final AuditNoticeProducer auditNoticeProducer;
 
     public RegistrationServiceImpl(RegistrationMapper registrationMapper,
                                    ActivityMapper activityMapper,
                                    UserMapper userMapper,
-                                   NoticeService noticeService) {
+                                   ActivityCacheService activityCacheService,
+                                   AuditNoticeProducer auditNoticeProducer) {
         this.registrationMapper = registrationMapper;
         this.activityMapper = activityMapper;
         this.userMapper = userMapper;
-        this.noticeService = noticeService;
+        this.activityCacheService = activityCacheService;
+        this.auditNoticeProducer = auditNoticeProducer;
     }
 
     @Override
@@ -93,6 +100,7 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
             throw new BusinessException("你已报名该活动");
         }
 
+        activityCacheService.evictPopularRankingCache();
         return toRegistrationVO(registration);
     }
 
@@ -114,6 +122,7 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
             throw new BusinessException("活动报名人数更新失败");
         }
 
+        activityCacheService.evictPopularRankingCache();
         return toRegistrationVO(registrationMapper.selectById(registrationId));
     }
 
@@ -130,8 +139,7 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
         }
 
         Registration updatedRegistration = registrationMapper.selectById(registrationId);
-        Activity activity = activityMapper.selectById(updatedRegistration.getActivityId());
-        noticeService.createRegistrationAuditNotice(updatedRegistration, activity, true);
+        sendAuditNoticeAfterCommit(updatedRegistration, true);
         return toRegistrationVO(updatedRegistration);
     }
 
@@ -153,9 +161,9 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
             throw new BusinessException("活动报名人数更新失败");
         }
 
+        activityCacheService.evictPopularRankingCache();
         Registration updatedRegistration = registrationMapper.selectById(registrationId);
-        Activity activity = activityMapper.selectById(updatedRegistration.getActivityId());
-        noticeService.createRegistrationAuditNotice(updatedRegistration, activity, false);
+        sendAuditNoticeAfterCommit(updatedRegistration, false);
         return toRegistrationVO(updatedRegistration);
     }
 
@@ -268,6 +276,7 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
             throw new BusinessException("报名状态已变化，请刷新后重试");
         }
 
+        activityCacheService.evictPopularRankingCache();
         return toRegistrationVO(registrationMapper.selectById(registration.getId()));
     }
 
@@ -303,6 +312,21 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
         if (!REGISTRATION_STATUS_PENDING.equals(registration.getStatus())) {
             throw new BusinessException("当前报名状态不能审核通过");
         }
+    }
+
+    private void sendAuditNoticeAfterCommit(Registration registration, boolean approved) {
+        AuditNoticeMessage message = new AuditNoticeMessage(
+                registration.getId(),
+                registration.getActivityId(),
+                approved
+        );
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                auditNoticeProducer.send(message);
+            }
+        });
     }
 
     private void validateRegistrationCanReject(Registration registration) {

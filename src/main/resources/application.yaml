@@ -1,16 +1,30 @@
 spring:
   application:
     name: activity-booking-system
+
+  # mysql数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/activity_booking_system
     username: root
     password: 1234
+
+  # redis缓存中间件配置
   data:
     redis:
       host: localhost
       port: 8989
       database: 0
+
+  # 消息中间件配置
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+  # 发送邮箱配置
   mail:
     host: smtp.qq.com
     port: 465
@@ -28,10 +42,19 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
 
+# minio连接配置
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin123
+  bucket-name: activity-checkin
+
+
 server:
   address: 127.0.0.1
   port: 8080
 
+# mybatis-plus持久层框架配置
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: com.example.activitybookingsystem.entity
@@ -39,6 +62,8 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
+
+# 日志配置
 logging:
   level:
     com.example.activitybookingsystem.mapper: debug

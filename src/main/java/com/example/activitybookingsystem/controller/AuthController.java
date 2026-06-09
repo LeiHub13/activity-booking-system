@@ -2,6 +2,7 @@ package com.example.activitybookingsystem.controller;
 
 import com.example.activitybookingsystem.common.result.Result;
 import com.example.activitybookingsystem.dto.LoginDTO;
+import com.example.activitybookingsystem.dto.RefreshTokenDTO;
 import com.example.activitybookingsystem.dto.RegisterDTO;
 import com.example.activitybookingsystem.dto.ResetPasswordDTO;
 import com.example.activitybookingsystem.dto.SendPasswordResetCodeDTO;
@@ -39,14 +40,16 @@ public class AuthController {
         return Result.success(token);
     }
 
+    @PostMapping("/refresh")
+    public Result<LoginVO> refreshToken(@RequestBody @Valid RefreshTokenDTO refreshTokenDTO) {
+        return Result.success(userService.refreshToken(refreshTokenDTO.getRefreshToken()));
+    }
+
     @PostMapping("/logout")
     public Result<Void> logout(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        String token = null;
-        if (header != null && header.startsWith("Bearer ")) {
-            token = header.substring(7);
-        }
-        userService.logout(token);
+        String accessToken = extractBearerToken(request.getHeader("Authorization"));
+        String refreshToken = request.getHeader("Refresh-Token");
+        userService.logout(accessToken, refreshToken);
         return Result.success();
     }
 
@@ -60,5 +63,12 @@ public class AuthController {
     public Result<Void> resetPassword(@RequestBody @Valid ResetPasswordDTO dto) {
         mailService.resetPassword(dto);
         return Result.success();
+    }
+
+    private String extractBearerToken(String header) {
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring(7);
+        }
+        return null;
     }
 }

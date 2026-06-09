@@ -28,14 +28,16 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
-    private static final long LOGIN_EXPIRE_HOURS = 24;
-    private static final String LOGIN_TOKEN_KEY_PREFIX = "login:token:";
-    private static final String LOGIN_USER_KEY_PREFIX = "login:user:";
+    private static final String LOGIN_ACCESS_TOKEN_KEY_PREFIX = "login:access:";
+    private static final String LOGIN_REFRESH_TOKEN_KEY_PREFIX = "login:refresh:";
+    private static final String LOGIN_USER_ACCESS_KEY_PREFIX = "login:user:access:";
+    private static final String LOGIN_USER_REFRESH_KEY_PREFIX = "login:user:refresh:";
 
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
@@ -100,48 +102,74 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException("账号已被禁用");
         }
 
-        List<String> roleCodes = roleMapper.selectRoleCodesByUserId(user.getId());
-        if (roleCodes == null || roleCodes.isEmpty()) {
-            throw new BusinessException("当前用户未分配角色");
-        }
+        String role = getUserRole(user.getId());
+        String accessToken = JwtUtil.generateAccessToken(user.getId(), user.getUsername(), role);
+        String refreshToken = JwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+        saveLoginTokens(user.getId(), accessToken, refreshToken);
 
-        String role = roleCodes.contains("ADMIN") ? "ROLE_ADMIN" : "ROLE_" + roleCodes.get(0);
-        String token = JwtUtil.generateToken(user.getId(), user.getUsername(), role);
-        saveLoginToken(user.getId(), token);
-
-        return new LoginVO(token);
+        return buildLoginVO(accessToken, refreshToken);
     }
 
     @Override
-    public void logout(String token) {
-        if (!StringUtils.hasText(token)) {
-            return;
+    public LoginVO refreshToken(String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) {
+            throw new BusinessException("刷新 token 不能为空");
         }
 
-        String userId = stringRedisTemplate.opsForValue().get(LOGIN_TOKEN_KEY_PREFIX + token);
-        stringRedisTemplate.delete(LOGIN_TOKEN_KEY_PREFIX + token);
-
-        if (StringUtils.hasText(userId)) {
-            String userKey = LOGIN_USER_KEY_PREFIX + userId;
-            String currentToken = stringRedisTemplate.opsForValue().get(userKey);
-            if (token.equals(currentToken)) {
-                stringRedisTemplate.delete(userKey);
-            }
-            return;
-        }
-
+        Claims claims;
         try {
-            Claims claims = JwtUtil.parseToken(token);
-            Long tokenUserId = claims.get("userId", Long.class);
-            if (tokenUserId != null) {
-                String userKey = LOGIN_USER_KEY_PREFIX + tokenUserId;
-                String currentToken = stringRedisTemplate.opsForValue().get(userKey);
-                if (token.equals(currentToken)) {
-                    stringRedisTemplate.delete(userKey);
-                }
-            }
-        } catch (Exception ignored) {
-            // token 已损坏或过期时，只需要确保 token key 被删除。
+            claims = JwtUtil.parseToken(refreshToken);
+        } catch (Exception e) {
+            throw new BusinessException("刷新 token 已过期或无效");
+        }
+
+        String tokenType = claims.get("tokenType", String.class);
+        if (!JwtUtil.TOKEN_TYPE_REFRESH.equals(tokenType)) {
+            throw new BusinessException("token 类型不正确");
+        }
+
+        Long userId = claims.get("userId", Long.class);
+        if (userId == null) {
+            throw new BusinessException("刷新 token 无效");
+        }
+
+        String redisUserId = stringRedisTemplate.opsForValue().get(LOGIN_REFRESH_TOKEN_KEY_PREFIX + refreshToken);
+        String currentRefreshToken = stringRedisTemplate.opsForValue().get(LOGIN_USER_REFRESH_KEY_PREFIX + userId);
+        if (!Objects.equals(String.valueOf(userId), redisUserId) || !refreshToken.equals(currentRefreshToken)) {
+            throw new BusinessException("刷新 token 已失效");
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("当前用户不存在");
+        }
+        if (user.getStatus() == null || user.getStatus() != 1) {
+            throw new BusinessException("账号已被禁用");
+        }
+
+        String role = getUserRole(user.getId());
+        String accessToken = JwtUtil.generateAccessToken(user.getId(), user.getUsername(), role);
+        refreshAccessToken(user.getId(), accessToken);
+        return buildLoginVO(accessToken, refreshToken);
+    }
+
+    @Override
+    public void logout(String accessToken, String refreshToken) {
+        Long userId = resolveUserIdFromRedis(LOGIN_ACCESS_TOKEN_KEY_PREFIX, accessToken);
+        if (userId == null) {
+            userId = resolveUserIdFromRedis(LOGIN_REFRESH_TOKEN_KEY_PREFIX, refreshToken);
+        }
+
+        if (StringUtils.hasText(accessToken)) {
+            stringRedisTemplate.delete(LOGIN_ACCESS_TOKEN_KEY_PREFIX + accessToken);
+        }
+        if (StringUtils.hasText(refreshToken)) {
+            stringRedisTemplate.delete(LOGIN_REFRESH_TOKEN_KEY_PREFIX + refreshToken);
+        }
+
+        if (userId != null) {
+            deleteCurrentToken(LOGIN_USER_ACCESS_KEY_PREFIX + userId, LOGIN_ACCESS_TOKEN_KEY_PREFIX, accessToken);
+            deleteCurrentToken(LOGIN_USER_REFRESH_KEY_PREFIX + userId, LOGIN_REFRESH_TOKEN_KEY_PREFIX, refreshToken);
         }
     }
 
@@ -165,25 +193,95 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return toUserInfoVO(user);
     }
 
-    private void saveLoginToken(Long userId, String token) {
-        String userKey = LOGIN_USER_KEY_PREFIX + userId;
-        String oldToken = stringRedisTemplate.opsForValue().get(userKey);
-        if (StringUtils.hasText(oldToken)) {
-            stringRedisTemplate.delete(LOGIN_TOKEN_KEY_PREFIX + oldToken);
+    private void saveLoginTokens(Long userId, String accessToken, String refreshToken) {
+        String userAccessKey = LOGIN_USER_ACCESS_KEY_PREFIX + userId;
+        String userRefreshKey = LOGIN_USER_REFRESH_KEY_PREFIX + userId;
+
+        String oldAccessToken = stringRedisTemplate.opsForValue().get(userAccessKey);
+        if (StringUtils.hasText(oldAccessToken)) {
+            stringRedisTemplate.delete(LOGIN_ACCESS_TOKEN_KEY_PREFIX + oldAccessToken);
+        }
+        String oldRefreshToken = stringRedisTemplate.opsForValue().get(userRefreshKey);
+        if (StringUtils.hasText(oldRefreshToken)) {
+            stringRedisTemplate.delete(LOGIN_REFRESH_TOKEN_KEY_PREFIX + oldRefreshToken);
         }
 
+        saveAccessToken(userId, accessToken);
         stringRedisTemplate.opsForValue().set(
-                LOGIN_TOKEN_KEY_PREFIX + token,
+                LOGIN_REFRESH_TOKEN_KEY_PREFIX + refreshToken,
                 userId.toString(),
-                LOGIN_EXPIRE_HOURS,
-                TimeUnit.HOURS
+                JwtUtil.REFRESH_TOKEN_EXPIRE_SECONDS,
+                TimeUnit.SECONDS
         );
         stringRedisTemplate.opsForValue().set(
-                userKey,
-                token,
-                LOGIN_EXPIRE_HOURS,
-                TimeUnit.HOURS
+                userRefreshKey,
+                refreshToken,
+                JwtUtil.REFRESH_TOKEN_EXPIRE_SECONDS,
+                TimeUnit.SECONDS
         );
+    }
+
+    private void refreshAccessToken(Long userId, String accessToken) {
+        String userAccessKey = LOGIN_USER_ACCESS_KEY_PREFIX + userId;
+        String oldAccessToken = stringRedisTemplate.opsForValue().get(userAccessKey);
+        if (StringUtils.hasText(oldAccessToken)) {
+            stringRedisTemplate.delete(LOGIN_ACCESS_TOKEN_KEY_PREFIX + oldAccessToken);
+        }
+        saveAccessToken(userId, accessToken);
+    }
+
+    private void saveAccessToken(Long userId, String accessToken) {
+        stringRedisTemplate.opsForValue().set(
+                LOGIN_ACCESS_TOKEN_KEY_PREFIX + accessToken,
+                userId.toString(),
+                JwtUtil.ACCESS_TOKEN_EXPIRE_SECONDS,
+                TimeUnit.SECONDS
+        );
+        stringRedisTemplate.opsForValue().set(
+                LOGIN_USER_ACCESS_KEY_PREFIX + userId,
+                accessToken,
+                JwtUtil.ACCESS_TOKEN_EXPIRE_SECONDS,
+                TimeUnit.SECONDS
+        );
+    }
+
+    private void deleteCurrentToken(String userTokenKey, String tokenKeyPrefix, String providedToken) {
+        String currentToken = stringRedisTemplate.opsForValue().get(userTokenKey);
+        if (!StringUtils.hasText(currentToken)) {
+            return;
+        }
+        if (!StringUtils.hasText(providedToken) || currentToken.equals(providedToken)) {
+            stringRedisTemplate.delete(tokenKeyPrefix + currentToken);
+            stringRedisTemplate.delete(userTokenKey);
+        }
+    }
+
+    private Long resolveUserIdFromRedis(String tokenKeyPrefix, String token) {
+        if (!StringUtils.hasText(token)) {
+            return null;
+        }
+        String userId = stringRedisTemplate.opsForValue().get(tokenKeyPrefix + token);
+        if (!StringUtils.hasText(userId)) {
+            return null;
+        }
+        return Long.valueOf(userId);
+    }
+
+    private LoginVO buildLoginVO(String accessToken, String refreshToken) {
+        return LoginVO.of(
+                accessToken,
+                refreshToken,
+                JwtUtil.ACCESS_TOKEN_EXPIRE_SECONDS,
+                JwtUtil.REFRESH_TOKEN_EXPIRE_SECONDS
+        );
+    }
+
+    private String getUserRole(Long userId) {
+        List<String> roleCodes = roleMapper.selectRoleCodesByUserId(userId);
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            throw new BusinessException("当前用户未分配角色");
+        }
+        return roleCodes.contains("ADMIN") ? "ROLE_ADMIN" : "ROLE_" + roleCodes.get(0);
     }
 
     private User getCurrentUserEntity() {

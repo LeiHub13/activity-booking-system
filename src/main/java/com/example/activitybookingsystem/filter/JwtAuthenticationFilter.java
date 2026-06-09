@@ -47,14 +47,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             Claims claims = JwtUtil.parseToken(token);
-            log.info("claim: {}", claims.toString());
-            log.info("token: {}", token);
             String username = claims.get("username", String.class);
             String role = claims.get("role", String.class);
-            // Redis 里存在这条 token 记录，才认为当前登录态仍然有效。
-            String redisValue = stringRedisTemplate.opsForValue().get("login:token:" + token);
+            String tokenType = claims.get("tokenType", String.class);
+            // 业务接口只接受 accessToken，refreshToken 只能调用刷新接口。
+            String redisValue = stringRedisTemplate.opsForValue().get("login:access:" + token);
 
-            if (username != null && role != null && redisValue != null) {
+            if (JwtUtil.TOKEN_TYPE_ACCESS.equals(tokenType)
+                    && username != null
+                    && role != null
+                    && redisValue != null) {
                 // 把 JWT 里的角色装进 Spring Security，上层接口才能走 hasRole 规则。
                 UsernamePasswordAuthenticationToken authenticationToken =
                         new UsernamePasswordAuthenticationToken(

@@ -12,7 +12,8 @@ public interface UserService extends IService<User> {
 
     void register(RegisterDTO registerDTO);
     LoginVO login(LoginDTO loginDTO);
-    void logout(String token);
+    LoginVO refreshToken(String refreshToken);
+    void logout(String accessToken, String refreshToken);
     UserInfoVO getCurrentUserInfo();
     UserInfoVO updateCurrentUserInfo(UpdateUserInfoDTO updateUserInfoDTO);
 }

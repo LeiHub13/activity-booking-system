@@ -31,7 +31,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
     private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String STATUS_CLOSED = "CLOSED";
     private static final int DEFAULT_RANKING_LIMIT = 10;
-    private static final int MAX_RANKING_LIMIT = 50;
+    private static final int POPULAR_RANKING_CACHE_SIZE = 20;
 
     private final ActivityCacheService activityCacheService;
     private final ActivityMapper activityMapper;
@@ -65,6 +65,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
         activity.setUpdateTime(now);
 
         activityMapper.insert(activity);
+        activityCacheService.evictPopularRankingCache();
         return toActivityVO(activity);
     }
 
@@ -95,6 +96,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
         activity.setUpdateTime(LocalDateTime.now());
 
         activityMapper.updateById(activity);
+        activityCacheService.evictPopularRankingCache();
         return toActivityVO(activity);
     }
 
@@ -109,6 +111,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
         activity.setStatus(STATUS_CLOSED);
         activity.setUpdateTime(LocalDateTime.now());
         activityMapper.updateById(activity);
+        activityCacheService.evictPopularRankingCache();
         return toActivityVO(activity);
     }
 
@@ -145,12 +148,15 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
 
     @Override
     public List<ActivityRegistrationStatsVO> listPopularActivityRanking(Integer limit) {
+        int safeLimit = normalizeRankingLimit(limit);
         List<ActivityRegistrationStatsVO> list = activityCacheService.getPopularActivityRanking();
         if (list == null) {
-            activityCacheService.setPopularRankingCache(activityMapper.selectPopularActivityRanking(normalizeRankingLimit(limit)));
-            return activityMapper.selectPopularActivityRanking(normalizeRankingLimit(limit));
+            list = activityMapper.selectPopularActivityRanking(POPULAR_RANKING_CACHE_SIZE);
+            activityCacheService.setPopularRankingCache(list);
         }
-        return list;
+        return list.stream()
+                .limit(safeLimit)
+                .toList();
     }
 
     @Override
@@ -217,6 +223,6 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
         if (limit == null || limit <= 0) {
             return DEFAULT_RANKING_LIMIT;
         }
-        return Math.min(limit, MAX_RANKING_LIMIT);
+        return Math.min(limit, POPULAR_RANKING_CACHE_SIZE);
     }
 }

@@ -137,7 +137,7 @@ sql/init.sql
 初始化方式一：在命令行执行：
 
 ```powershell
-mysql -uroot -p1234 < sql/init.sql
+mysql -u root -p < sql/init.sql
 ```
 
 初始化方式二：进入 MySQL 客户端后执行：

@@ -1,7 +1,6 @@
 package com.example.activitybookingsystem.cache;
 
 import com.example.activitybookingsystem.vo.ActivityRegistrationStatsVO;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,7 +13,7 @@ import java.time.Duration;
 import java.util.List;
 
 @Slf4j
-@Component
+@Component   //缓存热门活动
 public class ActivityCacheService {
     private static final String POPULAR_RANKING_KEY = "activity:popular:ranking:top20";
     private static final Duration DURATION_RANKING_TTL = Duration.ofMinutes(5);
@@ -27,10 +26,10 @@ public class ActivityCacheService {
         this.objectMapper = objectMapper;
     }
 
-    //从缓存中取活动
+    // 从缓存中读取热门活动排行，缓存不存在时返回 null。
     public List<ActivityRegistrationStatsVO> getPopularActivityRanking(){
         String json = stringRedisTemplate.opsForValue().get(POPULAR_RANKING_KEY);
-        if (StringUtils.isEmpty(json)){
+        if (!StringUtils.hasText(json)){
             return null;
         }
         try{
@@ -42,7 +41,7 @@ public class ActivityCacheService {
         }
     }
 
-    //把活动存入缓存
+    // 把热门活动排行写入缓存，TTL 到期后自动失效。
     public void setPopularRankingCache(List<ActivityRegistrationStatsVO> rankingList){
         try{
             String json = objectMapper.writeValueAsString(rankingList);
@@ -52,7 +51,8 @@ public class ActivityCacheService {
         }
     }
 
-    private void evictPopularRankingCache() {
+    // 活动报名人数或活动状态变化后删除缓存，下次查询会重新查库并回写。
+    public void evictPopularRankingCache() {
         stringRedisTemplate.delete(POPULAR_RANKING_KEY);
     }
 }
