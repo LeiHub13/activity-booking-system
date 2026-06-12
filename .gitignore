@@ -1,6 +1,12 @@
 docs/HELP.md
 target/
 .m2repo/
+.env
+*.env
+!.env.example
+src/main/resources/application-local.yaml
+src/main/resources/application-dev.yaml
+src/main/resources/application-prod.yaml
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

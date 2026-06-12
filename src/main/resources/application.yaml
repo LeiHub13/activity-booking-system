@@ -2,57 +2,65 @@ spring:
   application:
     name: activity-booking-system
 
+  config:
+    import: optional:file:.env[.properties]
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:20MB}
+      max-request-size: ${MAX_REQUEST_SIZE:25MB}
+
   # mysql数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/activity_booking_system
-    username: root
-    password: 1234
+    url: ${DB_URL:jdbc:mysql://localhost:3306/activity_booking_system}
+    username: ${DB_USERNAME:root} #root为默认值
+    password: ${DB_PASSWORD:}
 
   # redis缓存中间件配置
   data:
     redis:
-      host: localhost
-      port: 8989
-      database: 0
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
 
   # 消息中间件配置
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-    virtual-host: /
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
 
   # 发送邮箱配置
   mail:
-    host: smtp.qq.com
-    port: 465
-    username: 3917997689@qq.com
-    password: jdnazkyybfmmcgdd
-    protocol: smtp
-    default-encoding: UTF-8
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    protocol: ${MAIL_PROTOCOL:smtp}
+    default-encoding: ${MAIL_DEFAULT_ENCODING:UTF-8}
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${MAIL_SMTP_AUTH:true}
           ssl:
-            enable: true
+            enable: ${MAIL_SMTP_SSL_ENABLE:true}
   Jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
 
 # minio连接配置
 minio:
-  endpoint: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin123
-  bucket-name: activity-checkin
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:}
+  bucket-name: ${MINIO_BUCKET_NAME:activity-checkin}
 
 
 server:
-  address: 127.0.0.1
-  port: 8080
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
 
 # mybatis-plus持久层框架配置
 mybatis-plus:
