@@ -21,9 +21,9 @@ public class JwtUtil {
     private static final SecretKey KEY =
             Keys.hmacShaKeyFor("activity-booking-system-secret-key-123456".getBytes());
 
-    public static String generateToken(Long userId, String username, String role) {
-        return generateAccessToken(userId, username, role);
-    }
+//    public static String generateToken(Long userId, String username, String role) {
+//        return generateAccessToken(userId, username, role);
+//    }
 
     public static String generateAccessToken(Long userId, String username, String role) {
         return Jwts.builder()

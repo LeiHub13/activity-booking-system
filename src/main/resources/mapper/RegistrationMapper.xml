@@ -16,6 +16,8 @@
             a.title as activityTitle,
             a.status as activityStatus,
             r.status as registrationStatus,
+            c.id is not null as checkedIn,
+            c.check_in_time as checkInTime,
             r.remark as remark,
             r.audit_user_id as auditUserId,
             au.username as auditUsername,
@@ -26,6 +28,7 @@
         left join `user` u on r.user_id = u.id
         left join activity a on r.activity_id = a.id
         left join `user` au on r.audit_user_id = au.id
+        left join check_in c on c.registration_id = r.id
         <where>
             <if test="status != null and status != ''">
                 and r.status = #{status}

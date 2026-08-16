@@ -3,6 +3,7 @@ package com.example.activitybookingsystem.service.serviceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.activitybookingsystem.common.exception.BusinessException;
+import com.example.activitybookingsystem.config.MinioProperties;
 import com.example.activitybookingsystem.entity.Activity;
 import com.example.activitybookingsystem.entity.CheckIn;
 import com.example.activitybookingsystem.entity.Registration;
@@ -13,6 +14,7 @@ import com.example.activitybookingsystem.mapper.RegistrationMapper;
 import com.example.activitybookingsystem.mapper.UserMapper;
 import com.example.activitybookingsystem.service.CheckInService;
 import com.example.activitybookingsystem.service.FileUploadService;
+import com.example.activitybookingsystem.vo.CheckInStatusVO;
 import com.example.activitybookingsystem.vo.CheckInVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.DuplicateKeyException;
@@ -34,17 +36,20 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
     private final RegistrationMapper registrationMapper;
     private final UserMapper userMapper;
     private final FileUploadService fileUploadService;
+    private final MinioProperties minioProperties;
 
     public CheckInServiceImpl(CheckInMapper checkInMapper,
                               ActivityMapper activityMapper,
                               RegistrationMapper registrationMapper,
                               UserMapper userMapper,
-                              FileUploadService fileUploadService) {
+                              FileUploadService fileUploadService,
+                              MinioProperties minioProperties) {
         this.checkInMapper = checkInMapper;
         this.activityMapper = activityMapper;
         this.registrationMapper = registrationMapper;
         this.userMapper = userMapper;
         this.fileUploadService = fileUploadService;
+        this.minioProperties = minioProperties;
     }
 
     @Override
@@ -70,14 +75,15 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
             throw new BusinessException("该活动已打卡，不能重复打卡");
         }
 
-        String imageUrl = fileUploadService.uploadCheckImage(file);
+        FileUploadService.UploadResult uploadResult = fileUploadService.uploadCheckImage(file);
         LocalDateTime now = LocalDateTime.now();
 
         CheckIn checkIn = new CheckIn();
         checkIn.setUserId(currentUser.getId());
         checkIn.setActivityId(activityId);
         checkIn.setRegistrationId(registration.getId());
-        checkIn.setImageUrl(imageUrl);
+        checkIn.setObjectName(uploadResult.objectName());
+        checkIn.setImageUrl(uploadResult.url());
         checkIn.setCheckInTime(now);
         checkIn.setCreateTime(now);
 
@@ -88,6 +94,47 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
         }
 
         return toCheckInVO(checkIn);
+    }
+
+    @Override
+    public CheckInVO getMyCheckIn(Long activityId) {
+        if (activityId == null) {
+            throw new BusinessException("活动ID不能为空");
+        }
+
+        User currentUser = getCurrentUserEntity();
+        CheckIn checkIn = getUserActivityCheckIn(currentUser.getId(), activityId);
+        if (checkIn == null) {
+            return null;
+        }
+        return toCheckInVO(checkIn);
+    }
+
+    @Override
+    public CheckInStatusVO getCheckInStatus(Long activityId) {
+        if (activityId == null) {
+            throw new BusinessException("活动ID不能为空");
+        }
+
+        User currentUser = getCurrentUserEntity();
+        CheckInStatusVO statusVO = new CheckInStatusVO();
+
+        LambdaQueryWrapper<Registration> registrationQuery = new LambdaQueryWrapper<>();
+        registrationQuery.eq(Registration::getUserId, currentUser.getId())
+                .eq(Registration::getActivityId, activityId)
+                .orderByDesc(Registration::getCreateTime)
+                .last("LIMIT 1");
+        Registration registration = registrationMapper.selectOne(registrationQuery);
+        if (registration != null) {
+            statusVO.setRegistrationStatus(registration.getStatus());
+        }
+
+        CheckIn checkIn = getUserActivityCheckIn(currentUser.getId(), activityId);
+        if (checkIn != null) {
+            statusVO.setCheckIn(toCheckInVO(checkIn));
+        }
+
+        return statusVO;
     }
 
     private Registration getApprovedRegistration(Long userId, Long activityId) {
@@ -123,6 +170,30 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
     private CheckInVO toCheckInVO(CheckIn checkIn) {
         CheckInVO checkInVO = new CheckInVO();
         BeanUtils.copyProperties(checkIn, checkInVO);
+        String objectName = resolveObjectName(checkIn);
+        if (objectName != null) {
+            // 桶内对象默认私有，统一返回预签名 URL 才能访问。
+            checkInVO.setImageUrl(fileUploadService.getCheckImagePresignedUrl(objectName));
+        }
         return checkInVO;
+    }
+
+    private String resolveObjectName(CheckIn checkIn) {
+        String objectName = checkIn.getObjectName();
+        if (objectName != null && !objectName.isBlank()) {
+            return objectName;
+        }
+        // 兼容历史数据：从存的完整 URL 里截取对象名。
+        String imageUrl = checkIn.getImageUrl();
+        if (imageUrl == null) {
+            return null;
+        }
+        String prefix = "/" + minioProperties.getBucketName() + "/";
+        int index = imageUrl.indexOf(prefix);
+        if (index < 0) {
+            return null;
+        }
+        String extracted = imageUrl.substring(index + prefix.length());
+        return extracted.isBlank() ? null : extracted;
     }
 }

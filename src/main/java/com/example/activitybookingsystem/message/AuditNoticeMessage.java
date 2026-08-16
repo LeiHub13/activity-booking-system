@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AuditNoticeMessage {
-
     private Long registrationId;
     private Long activityId;
     private Boolean approved;

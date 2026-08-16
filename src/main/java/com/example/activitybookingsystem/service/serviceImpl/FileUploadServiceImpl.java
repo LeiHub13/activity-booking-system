@@ -4,9 +4,11 @@ import com.example.activitybookingsystem.common.exception.BusinessException;
 import com.example.activitybookingsystem.config.MinioProperties;
 import com.example.activitybookingsystem.service.FileUploadService;
 import io.minio.BucketExistsArgs;
+import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.http.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,12 +17,14 @@ import java.time.LocalDate;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class FileUploadServiceImpl implements FileUploadService {
 
     private static final Set<String> IMAGE_SUFFIXES = Set.of(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp");
+    private static final int PRESIGNED_URL_EXPIRY_DAYS = 7;
 
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
@@ -31,7 +35,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     }
 
     @Override
-    public String uploadCheckImage(MultipartFile file) {
+    public UploadResult uploadCheckImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("上传图片不能为空！");
         }
@@ -52,17 +56,37 @@ public class FileUploadServiceImpl implements FileUploadService {
         try{
             // bucket 不存在时自动创建，避免首次上传因为未建桶失败。
             ensureBucketExists();
-            //设置minio对象
+//设置minio对象
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(minioProperties.getBucketName())
                     .object(objectName)
                     .stream(file.getInputStream(), file.getSize(), -1)
                     .contentType(file.getContentType())
                     .build());
-            return minioProperties.getEndpoint() + "/" + minioProperties.getBucketName() + "/" + objectName;
+            String url = minioProperties.getEndpoint() + "/" + minioProperties.getBucketName() + "/" + objectName;
+            return new UploadResult(objectName, url);
         }catch (Exception e){
             log.error("上传打卡图片失败，bucket={}，object={}", minioProperties.getBucketName(), objectName, e);
             throw new BusinessException("图片上传失败，请检查 MinIO 服务和存储桶配置！");
+        }
+    }
+
+    @Override
+    public String getCheckImagePresignedUrl(String objectName) {
+        if (objectName == null || objectName.isBlank()) {
+            throw new BusinessException("打卡图片对象名不能为空");
+        }
+        try {
+            // 桶内对象默认私有，只能通过预签名 URL 访问。
+            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(minioProperties.getBucketName())
+                    .object(objectName)
+                    .expiry(PRESIGNED_URL_EXPIRY_DAYS, TimeUnit.DAYS)
+                    .build());
+        } catch (Exception e) {
+            log.error("生成打卡图片预签名URL失败，object={}", objectName, e);
+            throw new BusinessException("获取打卡图片地址失败，请检查 MinIO 服务配置！");
         }
     }
 

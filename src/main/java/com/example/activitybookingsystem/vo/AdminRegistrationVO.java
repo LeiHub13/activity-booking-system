@@ -17,6 +17,8 @@ public class AdminRegistrationVO {
     private String activityTitle;
     private String activityStatus;
     private String registrationStatus;
+    private Boolean checkedIn;
+    private LocalDateTime checkInTime;
     private String remark;
     private Long auditUserId;
     private String auditUsername;

@@ -2,7 +2,9 @@ package com.example.activitybookingsystem.controller;
 
 import com.example.activitybookingsystem.common.result.Result;
 import com.example.activitybookingsystem.service.CheckInService;
+import com.example.activitybookingsystem.vo.CheckInStatusVO;
 import com.example.activitybookingsystem.vo.CheckInVO;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,5 +25,15 @@ public class CheckInController {
     public Result<CheckInVO> createCheckIn(@RequestParam Long activityId,
                                            @RequestParam MultipartFile file) {
         return Result.success(checkInService.createCheckIn(activityId, file));
+    }
+
+    @GetMapping("/my")
+    public Result<CheckInVO> getMyCheckIn(@RequestParam Long activityId) {
+        return Result.success(checkInService.getMyCheckIn(activityId));
+    }
+
+    @GetMapping("/status")
+    public Result<CheckInStatusVO> getCheckInStatus(@RequestParam Long activityId) {
+        return Result.success(checkInService.getCheckInStatus(activityId));
     }
 }
