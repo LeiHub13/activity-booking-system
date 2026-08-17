@@ -14,6 +14,7 @@ import com.example.activitybookingsystem.mapper.RegistrationMapper;
 import com.example.activitybookingsystem.mapper.UserMapper;
 import com.example.activitybookingsystem.service.CheckInService;
 import com.example.activitybookingsystem.service.FileUploadService;
+import com.example.activitybookingsystem.service.PointService;
 import com.example.activitybookingsystem.vo.CheckInStatusVO;
 import com.example.activitybookingsystem.vo.CheckInVO;
 import org.springframework.beans.BeanUtils;
@@ -30,6 +31,8 @@ import java.time.LocalDateTime;
 public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> implements CheckInService {
 
     private static final String REGISTRATION_STATUS_APPROVED = "APPROVED";
+    private static final String POINT_TYPE_CHECK_IN = "CHECK_IN";
+    private static final int CHECK_IN_POINTS = 20;
 
     private final CheckInMapper checkInMapper;
     private final ActivityMapper activityMapper;
@@ -37,19 +40,22 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
     private final UserMapper userMapper;
     private final FileUploadService fileUploadService;
     private final MinioProperties minioProperties;
+    private final PointService pointService;
 
     public CheckInServiceImpl(CheckInMapper checkInMapper,
                               ActivityMapper activityMapper,
                               RegistrationMapper registrationMapper,
                               UserMapper userMapper,
                               FileUploadService fileUploadService,
-                              MinioProperties minioProperties) {
+                              MinioProperties minioProperties,
+                              PointService pointService) {
         this.checkInMapper = checkInMapper;
         this.activityMapper = activityMapper;
         this.registrationMapper = registrationMapper;
         this.userMapper = userMapper;
         this.fileUploadService = fileUploadService;
         this.minioProperties = minioProperties;
+        this.pointService = pointService;
     }
 
     @Override
@@ -93,6 +99,8 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
             throw new BusinessException("该活动已打卡，不能重复打卡");
         }
 
+        pointService.awardPoints(currentUser.getId(), POINT_TYPE_CHECK_IN, checkIn.getId(),
+                CHECK_IN_POINTS, "活动打卡「" + activity.getTitle() + "」");
         return toCheckInVO(checkIn);
     }
 

@@ -15,6 +15,7 @@ import com.example.activitybookingsystem.mapper.RegistrationMapper;
 import com.example.activitybookingsystem.mapper.UserMapper;
 import com.example.activitybookingsystem.message.AuditNoticeMessage;
 import com.example.activitybookingsystem.mq.AuditNoticeProducer;
+import com.example.activitybookingsystem.service.PointService;
 import com.example.activitybookingsystem.service.RegistrationService;
 import com.example.activitybookingsystem.vo.AdminRegistrationVO;
 import com.example.activitybookingsystem.vo.MyRegistrationVO;
@@ -46,23 +47,28 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
     private static final String REGISTRATION_STATUS_CANCELED = "CANCELED";
     private static final String REGISTRATION_CATEGORY_ALL = "ALL";
     private static final String REGISTRATION_CATEGORY_ACTIVE = "ACTIVE";
+    private static final String POINT_TYPE_REGISTER = "REGISTER";
+    private static final int REGISTER_POINTS = 10;
 
     private final RegistrationMapper registrationMapper;
     private final ActivityMapper activityMapper;
     private final UserMapper userMapper;
     private final ActivityCacheService activityCacheService;
     private final AuditNoticeProducer auditNoticeProducer;
+    private final PointService pointService;
 
     public RegistrationServiceImpl(RegistrationMapper registrationMapper,
                                    ActivityMapper activityMapper,
                                    UserMapper userMapper,
                                    ActivityCacheService activityCacheService,
-                                   AuditNoticeProducer auditNoticeProducer) {
+                                   AuditNoticeProducer auditNoticeProducer,
+                                   PointService pointService) {
         this.registrationMapper = registrationMapper;
         this.activityMapper = activityMapper;
         this.userMapper = userMapper;
         this.activityCacheService = activityCacheService;
         this.auditNoticeProducer = auditNoticeProducer;
+        this.pointService = pointService;
     }
 
     @Override
@@ -139,6 +145,9 @@ public class RegistrationServiceImpl extends ServiceImpl<RegistrationMapper, Reg
         }
 
         Registration updatedRegistration = registrationMapper.selectById(registrationId);
+        Activity activity = activityMapper.selectById(updatedRegistration.getActivityId());
+        pointService.awardPoints(updatedRegistration.getUserId(), POINT_TYPE_REGISTER, updatedRegistration.getId(),
+                REGISTER_POINTS, "报名审核通过「" + (activity == null ? "活动" : activity.getTitle()) + "」");
         sendAuditNoticeAfterCommit(updatedRegistration, true);
         return toRegistrationVO(updatedRegistration);
     }
